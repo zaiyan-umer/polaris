@@ -1,0 +1,115 @@
+# ==========================================
+# Dependencies
+# ==========================================
+node_modules/
+/.pnp
+.pnp.js
+.yarn/cache/
+.yarn/unplugged/
+.yarn/build-state.yml
+.yarn/install-state.gz
+
+# ==========================================
+# Environment & Secret Files
+# ==========================================
+.env
+.env.*
+*.env
+*.env.*
+# Keep example/template environment files tracked
+!.env.example
+!.env.*.example
+!.env.template
+!.env.sample
+
+# ==========================================
+# Production & Build Outputs
+# ==========================================
+# Frontend (React / Vite / CRA / Next.js)
+dist
+dist/
+dist-ssr/
+build/
+out/
+.next/
+
+# Backend (TypeScript / Node compilation)
+*.tsbuildinfo
+lib/
+
+# ==========================================
+# Logs & Process Files
+# ==========================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+pid/
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================================
+# Testing & Code Coverage
+# ==========================================
+coverage/
+*.lcov
+.nyc_output/
+test-results/
+playwright-report/
+.playwright/
+
+# ==========================================
+# Caches & Temporary Files
+# ==========================================
+.cache/
+.temp/
+tmp/
+temp/
+.eslintcache
+.stylelintcache
+.vite/
+.node_repl_history
+
+# ==========================================
+# Databases & Local Storage (Docker / Volumes)
+# ==========================================
+*.sqlite
+*.sqlite3
+*.db
+pgdata/
+postgres-data/
+
+# ==========================================
+# Operating System
+# ==========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+[Dd]esktop.ini
+
+# ==========================================
+# IDEs & Code Editors
+# ==========================================
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# VS Code (ignore user settings, keep project configs)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
