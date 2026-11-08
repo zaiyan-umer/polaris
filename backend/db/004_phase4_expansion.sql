@@ -109,7 +109,20 @@ CREATE TABLE dataset_versions (
     UNIQUE (dataset_id, version_identifier),
 
   -- Index for dataset lookups
-  CONSTRAINT idx_dataset_versions_dataset UNIQUE (dataset_id)
+  CONSTRAINT idx_dataset_versions_dataset UNIQUE (dataset_id),
+
+  -- RLS: enable row-level security. Public metadata is readable by anon and
+  -- authenticated users; no INSERT/UPDATE/DELETE policies defined, so only the
+  -- backend service role may write.
+  ALTER TABLE dataset_versions ENABLE ROW LEVEL SECURITY;
+
+  -- SELECT policy: public metadata is readable by anon and authenticated users.
+  CREATE POLICY dataset_versions_select ON dataset_versions
+    FOR SELECT TO anon, authenticated
+    USING (true);
+
+  -- INSERT/UPDATE/DELETE: no policies defined. Only the backend service role
+  -- (using a service-role key) may write.
 );
 
 -- Index for source CRS lookups
@@ -147,7 +160,20 @@ CREATE TABLE dataset_assets (
     UNIQUE (dataset_version_id, product_id),
 
   -- Index for dataset version lookups
-  CONSTRAINT idx_dataset_assets_version UNIQUE (dataset_version_id)
+  CONSTRAINT idx_dataset_assets_version UNIQUE (dataset_version_id),
+
+  -- RLS: enable row-level security. Public asset metadata is readable by anon
+  -- and authenticated users; no INSERT/UPDATE/DELETE policies defined, so only
+  -- the backend service role may write.
+  ALTER TABLE dataset_assets ENABLE ROW LEVEL SECURITY;
+
+  -- SELECT policy: asset metadata is readable by anon and authenticated users.
+  CREATE POLICY dataset_assets_select ON dataset_assets
+    FOR SELECT TO anon, authenticated
+    USING (true);
+
+  -- INSERT/UPDATE/DELETE: no policies defined. Only the backend service role
+  -- (using a service-role key) may write.
 );
 
 -- Indexes for status and platform filtering
@@ -184,6 +210,19 @@ CREATE TABLE regional_statistics (
   -- Constraint: count statistics require a sample count
   CONSTRAINT regional_stats_value_sample_count_check
     CHECK (value IS NULL OR sample_count IS NOT NULL)
+
+  -- RLS: enable row-level security. Public statistical data is readable by anon
+  -- and authenticated users; no INSERT/UPDATE/DELETE policies defined, so only
+  -- the backend service role may write.
+  ALTER TABLE regional_statistics ENABLE ROW LEVEL SECURITY;
+
+  -- SELECT policy: statistics are readable by anon and authenticated users.
+  CREATE POLICY regional_statistics_select ON regional_statistics
+    FOR SELECT TO anon, authenticated
+    USING (true);
+
+  -- INSERT/UPDATE/DELETE: no policies defined. Only the backend service role
+  -- (using a service-role key) may write.
 );
 
 -- Indexes for variable, asset, and type filtering
@@ -224,7 +263,20 @@ CREATE TABLE provenance (
     UNIQUE (record_type, target_id, source_type, record_id),
 
   -- Index for record type lookups
-  CONSTRAINT idx_provenance_record_type UNIQUE (record_type)
+  CONSTRAINT idx_provenance_record_type UNIQUE (record_type),
+
+  -- RLS: enable row-level security. Provenance records are public scientific
+  -- data readable by anon and authenticated users; no INSERT/UPDATE/DELETE
+  -- policies defined, so only the backend service role may write.
+  ALTER TABLE provenance ENABLE ROW LEVEL SECURITY;
+
+  -- SELECT policy: provenance records are readable by anon and authenticated users.
+  CREATE POLICY provenance_select ON provenance
+    FOR SELECT TO anon, authenticated
+    USING (true);
+
+  -- INSERT/UPDATE/DELETE: no policies defined. Only the backend service role
+  -- (using a service-role key) may write.
 );
 
 -- Indexes for target and source lookups
@@ -249,6 +301,19 @@ CREATE TABLE analog_rankings (
   -- Constraint: similarity score must be in [0, 1] if present
   CONSTRAINT analog_rankings_similarity_check
     CHECK (similarity_score IS NULL OR (similarity_score >= 0 AND similarity_score <= 1))
+
+  -- RLS: enable row-level security. Analog rankings are public scientific data
+  -- readable by anon and authenticated users; no INSERT/UPDATE/DELETE policies
+  -- defined, so only the backend service role may write.
+  ALTER TABLE analog_rankings ENABLE ROW LEVEL SECURITY;
+
+  -- SELECT policy: rankings are readable by anon and authenticated users.
+  CREATE POLICY analog_rankings_select ON analog_rankings
+    FOR SELECT TO anon, authenticated
+    USING (true);
+
+  -- INSERT/UPDATE/DELETE: no policies defined. Only the backend service role
+  -- (using a service-role key) may write.
 );
 
 -- Index for earth location lookups (non-unique; multiple rankings per location are allowed)
@@ -275,10 +340,20 @@ CREATE TABLE analog_variable_scores (
 
   -- Constraint: score must be in [0, 1] if present
   CONSTRAINT analog_variable_scores_score_check
-    CHECK (score IS NULL OR (score >= 0 AND score <= 1)),
+    CHECK (score IS NULL OR (score >= 0 AND score <= 1))
 
-  -- Index for ranking lookups
-  CONSTRAINT idx_analog_variable_scores_ranking UNIQUE (ranking_id)
+  -- RLS: enable row-level security. Per-variable scores are public scientific
+  -- data readable by anon and authenticated users; no INSERT/UPDATE/DELETE
+  -- policies defined, so only the backend service role may write.
+  ALTER TABLE analog_variable_scores ENABLE ROW LEVEL SECURITY;
+
+  -- SELECT policy: scores are readable by anon and authenticated users.
+  CREATE POLICY analog_variable_scores_select ON analog_variable_scores
+    FOR SELECT TO anon, authenticated
+    USING (true);
+
+  -- INSERT/UPDATE/DELETE: no policies defined. Only the backend service role
+  -- (using a service-role key) may write.
 );
 
 -- Index for variable lookups
