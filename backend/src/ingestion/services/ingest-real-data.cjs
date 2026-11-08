@@ -11,7 +11,7 @@
 //   Copernicus    Earth  elevation     (DEM GLO-30 COG tiles, metres)
 //   ODE/LOLA      Moon   elevation     (LOLA RDR laser altimetry, metres)
 //   ODE/MOLA      Mars   elevation     (MOLA PEDR laser altimetry, metres)
-//   NASA CMR      Earth  metadata      (MOD11A1 collection + granules -> assets)
+//   NASA CMR      Earth  metadata      (MOD11A1 collection + coverage count)
 //
 // Sources are queried for the coordinates already present in `locations`, so no
 // location is invented either.
@@ -776,11 +776,21 @@ async function ingestAltimetry(cat, refs, { planetSlug, queryType, datasetId, ma
 }
 
 // ----------------------------------------------------------------------------
-// Stage 6 — NASA CMR (MODIS collection + granules -> metadata assets)
+// Stage 6 — NASA CMR (MODIS collection discovery)
 // ----------------------------------------------------------------------------
+//
+// CMR is a catalogue: it returns collection and granule metadata, never
+// measurements. The MOD11A1 collection is registered as a dataset version so
+// the source is documented, and granule coverage over the Earth sites is
+// counted and reported.
+//
+// Granule rows are deliberately NOT written to `dataset_assets`. They carry a
+// download URL and no measured value, and LP DAAC requires an Earthdata login
+// to fetch the pixels. A link is not a measurement, so it does not belong in
+// the database.
 
 async function stageCmr(cat, refs) {
-  console.log('\n=== Stage 6: NASA CMR (MODIS metadata) ===');
+  console.log('\n=== Stage 6: NASA CMR (MODIS collection) ===');
   const out = { collections: 0, granules: 0, inserted: 0, failed: 0, errors: [] };
 
   let collection;
@@ -798,10 +808,10 @@ async function stageCmr(cat, refs) {
     return out;
   }
   out.collections = 1;
-  console.log(`  collection ${collection.short_name} v${collection.version_id} (${collection.processing_level_id})`);
+  console.log(`  collection ${collection.short_name} v${collection.version_id} (level ${collection.processing_level_id})`);
 
   const versionIdentifier = `${collection.short_name}.${collection.version_id}`;
-  const version = await ensureDatasetVersion(cat, {
+  await ensureDatasetVersion(cat, {
     dataset_id: refs.modis.id,
     version_identifier: versionIdentifier,
     source_type: 'instrument',
@@ -815,11 +825,10 @@ async function stageCmr(cat, refs) {
     acquisition_end: collection.time_end ?? null,
     processing_level: `L${collection.processing_level_id}`,
   });
-  console.log(`  dataset_version ${versionIdentifier} -> ${version.id}`);
+  console.log(`  dataset_version ${versionIdentifier} registered`);
 
-  // Granules for the Earth locations that have coordinates.
+  // Count granules covering each Earth site, for coverage reporting only.
   const earth = cat.locationsOn('earth').filter(l => l.latitude_deg != null && l.longitude_deg != null);
-  const assets = [];
   for (const loc of earth) {
     const bounds = {
       minLon: loc.longitude_deg - 0.5,
@@ -827,78 +836,18 @@ async function stageCmr(cat, refs) {
       maxLon: loc.longitude_deg + 0.5,
       maxLat: loc.latitude_deg + 0.5,
     };
-    let result;
     try {
-      result = await searchCmrGranules('MOD11A1', bounds, null, 10);
+      const result = await searchCmrGranules('MOD11A1', bounds, null, 10);
+      const n = (result?.feed?.entry ?? []).length;
+      out.granules += n;
+      console.log(`  ${loc.name}: ${n} granules`);
     } catch (err) {
       out.errors.push(`${loc.name}: granule search failed: ${err.message}`);
       out.failed++;
-      continue;
-    }
-    const entries = result?.feed?.entry ?? [];
-    out.granules += entries.length;
-
-    for (const granule of entries) {
-      const downloadUrl = extractDataLink(granule);
-      assets.push({
-        dataset_version_id: version.id,
-        product_id: granule.id ?? null,
-        platform: 'Terra',
-        instrument: 'MODIS',
-        acquisition_start: granule.time_start ?? null,
-        acquisition_end: granule.time_end ?? null,
-        native_crs: 'WGS84',
-        native_resolution_m: 1000,
-        file_format: 'HDF-EOS',
-        download_url: downloadUrl,
-        metadata_url: `${CMR_BASE}granules.json?short_name=MOD11A1`,
-        availability_status: downloadUrl ? 'available' : 'incomplete',
-        created_by: 'polaris-ingest-1.0',
-        processing_notes: `CMR granule for ${loc.name}; Earthdata login required to download.`,
-      });
     }
   }
 
-  if (!DRY_RUN) {
-    for (const batch of chunk(assets, BATCH_SIZE)) {
-      try {
-        await postgrestUpsert('dataset_assets', batch, {
-          onConflict: 'dataset_version_id,product_id',
-        });
-        out.inserted += batch.length;
-      } catch (err) {
-        out.failed += batch.length;
-        out.errors.push(`asset batch failed: ${err.message}`);
-      }
-    }
-  } else {
-    out.inserted = assets.length;
-  }
-
-  // Provenance for the assets (needs real ids, so read them back).
-  if (!DRY_RUN && assets.length > 0) {
-    const productIds = assets.map(a => a.product_id).filter(Boolean);
-    const existing = await postgrestQuery('dataset_assets', {
-      dataset_version_id: { eq: version.id },
-      product_id: { in: productIds },
-    }, { select: 'id,product_id' });
-    for (const row of existing) {
-      refs.provenance.push({
-        record_type: 'asset',
-        target_id: row.id,
-        source_type: 'api',
-        source_name: 'NASA CMR',
-        source_url: `${CMR_BASE}granules.json?short_name=MOD11A1`,
-        record_id: row.product_id,
-        processing_params: JSON.stringify({ collection: 'MOD11A1', provider: 'LPCLOUD' }),
-        processing_version: 'polaris-ingest-1.0',
-        transformation: 'none (catalogue metadata)',
-        validation_status: 'verified',
-      });
-    }
-  }
-
-  console.log(`  granules ${out.granules}; assets upserted ${out.inserted}, failed ${out.failed}`);
+  console.log(`  granules covering Earth sites: ${out.granules} (not stored — links only)`);
   return out;
 }
 
@@ -1063,7 +1012,7 @@ async function main() {
   console.log(`  Copernicus tiles ${dem.fetched}, inserted ${dem.inserted}, skipped ${dem.skipped}, failed ${dem.failed}`);
   console.log(`  LOLA       points ${lola.fetched}, inserted ${lola.inserted}, skipped ${lola.skipped}, failed ${lola.failed}`);
   console.log(`  MOLA       points ${mola.fetched}, inserted ${mola.inserted}, skipped ${mola.skipped}, failed ${mola.failed}`);
-  console.log(`  CMR        collections ${cmr.collections}, granules ${cmr.granules}, assets ${cmr.inserted}, failed ${cmr.failed}`);
+  console.log(`  CMR        collections ${cmr.collections}, granules ${cmr.granules}, failed ${cmr.failed}`);
   console.log(`  regions    ${regions.regions}, statistics ${regions.statistics}, failed ${regions.failed}`);
   console.log(`  provenance inserted ${provenance.inserted}, failed ${provenance.failed}`);
 
